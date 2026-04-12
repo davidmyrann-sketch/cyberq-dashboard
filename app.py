@@ -9,18 +9,20 @@ from collections import deque
 from datetime import datetime
 import urllib.request
 import paho.mqtt.client as mqtt
+try:
+    import stripe
+    stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+except ImportError:
+    stripe = None
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 
-DB_PATH              = os.environ.get("DB_PATH", "cyberq_saas.db")
-PAYPAL_CLIENT_ID     = os.environ.get("PAYPAL_CLIENT_ID", "")
-PAYPAL_CLIENT_SECRET = os.environ.get("PAYPAL_CLIENT_SECRET", "")
-PAYPAL_PLAN_MONTHLY  = os.environ.get("PAYPAL_PLAN_MONTHLY", "")   # P-xxx
-PAYPAL_PLAN_ANNUAL   = os.environ.get("PAYPAL_PLAN_ANNUAL", "")    # P-xxx
-PAYPAL_WEBHOOK_ID    = os.environ.get("PAYPAL_WEBHOOK_ID", "")
-PAYPAL_BASE          = os.environ.get("PAYPAL_BASE", "https://api-m.paypal.com")
-APP_URL              = os.environ.get("APP_URL", "https://web-production-77bd1.up.railway.app")
+DB_PATH             = os.environ.get("DB_PATH", "cyberq_saas.db")
+STRIPE_WH_SECRET    = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_PRICE_MONTH  = os.environ.get("STRIPE_PRICE_MONTHLY", "")
+STRIPE_PRICE_YEAR   = os.environ.get("STRIPE_PRICE_ANNUAL", "")
+APP_URL             = os.environ.get("APP_URL", "https://web-production-77bd1.up.railway.app")
 API_BASE    = "https://myflameboss.com/api/v1"
 MQTT_HOST   = "s2.myflameboss.com"
 MQTT_PORT   = 8084
@@ -47,15 +49,16 @@ def init_db():
     db = sqlite3.connect(DB_PATH)
     db.executescript("""
     CREATE TABLE IF NOT EXISTS users (
-        id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-        email                   TEXT UNIQUE NOT NULL,
-        password_hash           TEXT NOT NULL,
-        name                    TEXT,
-        plan                    TEXT DEFAULT 'trial',
-        trial_ends              TEXT,
-        paypal_subscription_id  TEXT,
-        subscription_status     TEXT DEFAULT 'trial',
-        created_at              TEXT DEFAULT (datetime('now'))
+        id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+        email                  TEXT UNIQUE NOT NULL,
+        password_hash          TEXT NOT NULL,
+        name                   TEXT,
+        plan                   TEXT DEFAULT 'trial',
+        trial_ends             TEXT,
+        stripe_customer_id     TEXT,
+        stripe_subscription_id TEXT,
+        subscription_status    TEXT DEFAULT 'trial',
+        created_at             TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS devices (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,7 +72,10 @@ def init_db():
     """)
     # Migrate existing DB if columns missing
     try:
-        db.execute("ALTER TABLE users ADD COLUMN paypal_subscription_id TEXT")
+        db.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
+    except: pass
+    try:
+        db.execute("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT")
     except: pass
     try:
         db.execute("ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'trial'")
@@ -370,143 +376,92 @@ def setup():
                 return redirect(url_for("dashboard"))
     return render_template("setup.html", error=error)
 
-# ── PayPal helpers ─────────────────────────────────────────────────────────────
-
-def paypal_access_token():
-    """Returns a fresh Bearer token from PayPal OAuth."""
-    creds = base64.b64encode(f"{PAYPAL_CLIENT_ID}:{PAYPAL_CLIENT_SECRET}".encode()).decode()
-    req = urllib.request.Request(
-        f"{PAYPAL_BASE}/v1/oauth2/token",
-        data=b"grant_type=client_credentials",
-        headers={"Authorization": f"Basic {creds}", "Content-Type": "application/x-www-form-urlencoded"},
-    )
-    with urllib.request.urlopen(req, timeout=10) as r:
-        return json.loads(r.read())["access_token"]
-
-def paypal_post(path, body, token=None):
-    token = token or paypal_access_token()
-    data  = json.dumps(body).encode()
-    req   = urllib.request.Request(
-        f"{PAYPAL_BASE}{path}", data=data,
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=10) as r:
-        return json.loads(r.read())
-
-def paypal_get(path, token=None):
-    token = token or paypal_access_token()
-    req   = urllib.request.Request(
-        f"{PAYPAL_BASE}{path}",
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=10) as r:
-        return json.loads(r.read())
-
-def paypal_create_subscription(plan_id, user_email):
-    """Creates a PayPal subscription and returns (subscription_id, approve_url)."""
-    body = {
-        "plan_id": plan_id,
-        "subscriber": {"email_address": user_email},
-        "application_context": {
-            "brand_name": "CyberQ Dashboard",
-            "user_action": "SUBSCRIBE_NOW",
-            "return_url": APP_URL + "/checkout/success",
-            "cancel_url": APP_URL + "/pricing",
-        },
-    }
-    result = paypal_post("/v1/billing/subscriptions", body)
-    sub_id = result["id"]
-    approve_url = next(
-        (link["href"] for link in result.get("links", []) if link["rel"] == "approve"),
-        None
-    )
-    return sub_id, approve_url
-
-def paypal_verify_webhook(headers, raw_body):
-    """Verify PayPal webhook signature via PayPal API."""
-    if not PAYPAL_WEBHOOK_ID:
-        return True  # skip verification if not configured
-    body = {
-        "auth_algo":         headers.get("PAYPAL-AUTH-ALGO", ""),
-        "cert_url":          headers.get("PAYPAL-CERT-URL", ""),
-        "transmission_id":   headers.get("PAYPAL-TRANSMISSION-ID", ""),
-        "transmission_sig":  headers.get("PAYPAL-TRANSMISSION-SIG", ""),
-        "transmission_time": headers.get("PAYPAL-TRANSMISSION-TIME", ""),
-        "webhook_id":        PAYPAL_WEBHOOK_ID,
-        "webhook_event":     json.loads(raw_body),
-    }
-    try:
-        result = paypal_post("/v1/notifications/verify-webhook-signature", body)
-        return result.get("verification_status") == "SUCCESS"
-    except:
-        return False
-
 # ── Payment routes ─────────────────────────────────────────────────────────────
 
 @app.route("/pricing")
 def pricing_page():
     user = current_user()
-    return render_template("pricing.html", user=user)
+    return render_template("pricing.html", user=user,
+                           stripe_key=os.environ.get("STRIPE_PUBLISHABLE_KEY", ""))
 
 @app.route("/checkout")
 @login_required
 def checkout():
-    if not PAYPAL_CLIENT_ID or not PAYPAL_CLIENT_SECRET:
-        return "PayPal not configured", 500
-    plan    = request.args.get("plan", "monthly")
-    plan_id = PAYPAL_PLAN_ANNUAL if plan == "annual" else PAYPAL_PLAN_MONTHLY
-    if not plan_id:
-        return "PayPal plan IDs not configured", 500
+    if not stripe or not stripe.api_key:
+        return "Stripe not configured", 500
+    plan  = request.args.get("plan", "monthly")
+    price = STRIPE_PRICE_YEAR if plan == "annual" else STRIPE_PRICE_MONTH
+    if not price:
+        return "Stripe prices not configured", 500
+
     user = current_user()
-    try:
-        sub_id, approve_url = paypal_create_subscription(plan_id, user["email"])
-    except Exception as e:
-        return f"PayPal error: {e}", 500
-    # Store pending subscription_id so we can confirm it on return
-    session["pending_paypal_sub"] = sub_id
-    return redirect(approve_url, code=303)
+    customer_id = user["stripe_customer_id"]
+    if not customer_id:
+        customer = stripe.Customer.create(
+            email=user["email"],
+            name=user["name"] or user["email"],
+            metadata={"user_id": str(user["id"])}
+        )
+        customer_id = customer.id
+        get_db().execute("UPDATE users SET stripe_customer_id=? WHERE id=?",
+                         (customer_id, user["id"]))
+        get_db().commit()
+
+    session_obj = stripe.checkout.Session.create(
+        customer=customer_id,
+        payment_method_types=["card"],
+        line_items=[{"price": price, "quantity": 1}],
+        mode="subscription",
+        success_url=APP_URL + "/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url=APP_URL + "/pricing",
+        allow_promotion_codes=True,
+    )
+    return redirect(session_obj.url, code=303)
 
 @app.route("/checkout/success")
 @login_required
 def checkout_success():
-    sub_id = request.args.get("subscription_id") or session.pop("pending_paypal_sub", None)
-    if sub_id:
+    session_id = request.args.get("session_id")
+    if session_id and stripe and stripe.api_key:
         try:
-            sub = paypal_get(f"/v1/billing/subscriptions/{sub_id}")
-            status = "active" if sub.get("status") in ("ACTIVE", "APPROVED") else "trial"
-            get_db().execute(
-                "UPDATE users SET paypal_subscription_id=?, subscription_status=? WHERE id=?",
-                (sub_id, status, session["user_id"])
-            )
-            get_db().commit()
+            cs = stripe.checkout.Session.retrieve(session_id, expand=["subscription"])
+            sub = cs.subscription
+            if sub:
+                get_db().execute(
+                    "UPDATE users SET stripe_subscription_id=?, subscription_status='active' WHERE id=?",
+                    (sub.id, session["user_id"])
+                )
+                get_db().commit()
         except Exception as e:
-            print(f"PayPal checkout success error: {e}")
+            print(f"Checkout success error: {e}")
     return redirect(url_for("dashboard"))
 
 @app.route("/webhook", methods=["POST"])
-def paypal_webhook():
-    raw_body = request.get_data()
-    if not paypal_verify_webhook(dict(request.headers), raw_body):
-        return "Invalid signature", 400
+def stripe_webhook():
+    payload = request.get_data()
+    sig     = request.headers.get("Stripe-Signature", "")
+    try:
+        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WH_SECRET)
+    except Exception as e:
+        return str(e), 400
 
-    event     = json.loads(raw_body)
-    etype     = event.get("event_type", "")
-    resource  = event.get("resource", {})
-    sub_id    = resource.get("id", "")
+    db    = sqlite3.connect(DB_PATH)
+    etype = event["type"]
 
-    db = sqlite3.connect(DB_PATH)
-    if etype == "BILLING.SUBSCRIPTION.ACTIVATED":
-        db.execute("UPDATE users SET subscription_status='active' WHERE paypal_subscription_id=?", (sub_id,))
-    elif etype in ("BILLING.SUBSCRIPTION.CANCELLED", "BILLING.SUBSCRIPTION.EXPIRED"):
-        db.execute("UPDATE users SET subscription_status='cancelled' WHERE paypal_subscription_id=?", (sub_id,))
-    elif etype == "BILLING.SUBSCRIPTION.SUSPENDED":
-        db.execute("UPDATE users SET subscription_status='past_due' WHERE paypal_subscription_id=?", (sub_id,))
-    elif etype == "PAYMENT.SALE.COMPLETED":
-        # Subscription renewal confirmed
-        billing_agreement_id = resource.get("billing_agreement_id", "")
-        if billing_agreement_id:
-            db.execute("UPDATE users SET subscription_status='active' WHERE paypal_subscription_id=?",
-                       (billing_agreement_id,))
+    if etype in ("customer.subscription.updated", "customer.subscription.created"):
+        sub    = event["data"]["object"]
+        status = "active" if sub["status"] in ("active", "trialing") else sub["status"]
+        db.execute("UPDATE users SET subscription_status=?, stripe_subscription_id=? WHERE stripe_customer_id=?",
+                   (status, sub["id"], sub["customer"]))
+    elif etype == "customer.subscription.deleted":
+        sub = event["data"]["object"]
+        db.execute("UPDATE users SET subscription_status='cancelled' WHERE stripe_customer_id=?",
+                   (sub["customer"],))
+    elif etype == "invoice.payment_failed":
+        inv = event["data"]["object"]
+        db.execute("UPDATE users SET subscription_status='past_due' WHERE stripe_customer_id=?",
+                   (inv["customer"],))
+
     db.commit()
     db.close()
     return "", 200
@@ -526,8 +481,16 @@ def account():
 @app.route("/account/portal")
 @login_required
 def billing_portal():
-    # PayPal self-service subscription management
-    return redirect("https://www.paypal.com/myaccount/autopay/", code=303)
+    if not stripe or not stripe.api_key:
+        return redirect(url_for("account"))
+    user = current_user()
+    if not user["stripe_customer_id"]:
+        return redirect(url_for("pricing_page"))
+    portal = stripe.billing_portal.Session.create(
+        customer=user["stripe_customer_id"],
+        return_url=APP_URL + "/account"
+    )
+    return redirect(portal.url, code=303)
 
 @app.route("/dashboard")
 @subscription_required
