@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ 'Sign In' if mode == 'login' else 'Create Account' }} — CyberQ Dashboard</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d0d0d; color: #e8e8e8; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+.card { background: #161616; border: 1px solid #2a2a2a; border-radius: 16px; padding: 40px; width: 100%; max-width: 400px; }
+.logo { text-align: center; font-size: 22px; font-weight: 900; color: #FF6B1A; margin-bottom: 6px; }
+.subtitle { text-align: center; font-size: 14px; color: #666; margin-bottom: 32px; }
+h2 { font-size: 22px; font-weight: 800; margin-bottom: 24px; text-align: center; }
+label { font-size: 13px; color: #888; display: block; margin-bottom: 6px; }
+input { width: 100%; padding: 12px 14px; background: #0d0d0d; border: 1.5px solid #2a2a2a; border-radius: 8px; color: #e8e8e8; font-size: 15px; outline: none; margin-bottom: 16px; transition: border-color 0.2s; }
+input:focus { border-color: #FF6B1A; }
+.btn { width: 100%; padding: 14px; background: #FF6B1A; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 8px; transition: background 0.2s; }
+.btn:hover { background: #e55a0a; }
+.error { background: #2d1010; border: 1px solid #7f1d1d; border-radius: 8px; padding: 12px 14px; font-size: 14px; color: #fca5a5; margin-bottom: 16px; }
+.switch { text-align: center; margin-top: 24px; font-size: 14px; color: #666; }
+.switch a { color: #FF6B1A; text-decoration: none; font-weight: 600; }
+.back { display: block; text-align: center; margin-top: 20px; font-size: 13px; color: #555; text-decoration: none; }
+.back:hover { color: #888; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo">🔥 CyberQ Dashboard</div>
+  <div class="subtitle">{{ 'Welcome back, Pitmaster' if mode == 'login' else '14-day free trial — no credit card' }}</div>
+
+  <h2>{{ 'Sign In' if mode == 'login' else 'Create Account' }}</h2>
+
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST">
+    {% if mode == 'register' %}
+    <label>Your Name</label>
+    <input type="text" name="name" placeholder="Pitmaster Dave" required>
+    {% endif %}
+
+    <label>Email Address</label>
+    <input type="email" name="email" placeholder="you@example.com" required autocomplete="email">
+
+    <label>Password</label>
+    <input type="password" name="password" placeholder="{{ '••••••••' }}" required
+           minlength="{{ 1 if mode == 'login' else 6 }}"
+           autocomplete="{{ 'current-password' if mode == 'login' else 'new-password' }}">
+
+    <button type="submit" class="btn">
+      {{ 'Sign In →' if mode == 'login' else 'Create Account & Continue →' }}
+    </button>
+  </form>
+
+  <div class="switch">
+    {% if mode == 'login' %}
+      Don't have an account? <a href="/register">Start free trial</a>
+    {% else %}
+      Already have an account? <a href="/login">Sign in</a>
+    {% endif %}
+  </div>
+</div>
+
+<a href="/" class="back">← Back to home</a>
+
+</body>
+</html>

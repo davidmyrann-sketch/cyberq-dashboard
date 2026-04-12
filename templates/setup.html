@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connect Your CyberQ — CyberQ Dashboard</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d0d0d; color: #e8e8e8; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.card { background: #161616; border: 1px solid #2a2a2a; border-radius: 16px; padding: 40px; width: 100%; max-width: 460px; }
+.logo { text-align: center; font-size: 22px; font-weight: 900; color: #FF6B1A; margin-bottom: 24px; }
+h2 { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+.lead { font-size: 14px; color: #666; margin-bottom: 32px; line-height: 1.6; }
+label { font-size: 13px; color: #888; display: block; margin-bottom: 6px; }
+.help { font-size: 12px; color: #555; margin-top: -10px; margin-bottom: 16px; }
+input { width: 100%; padding: 12px 14px; background: #0d0d0d; border: 1.5px solid #2a2a2a; border-radius: 8px; color: #e8e8e8; font-size: 15px; outline: none; margin-bottom: 6px; transition: border-color 0.2s; }
+input:focus { border-color: #FF6B1A; }
+.btn { width: 100%; padding: 14px; background: #FF6B1A; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 12px; }
+.btn:hover { background: #e55a0a; }
+.error { background: #2d1010; border: 1px solid #7f1d1d; border-radius: 8px; padding: 12px 14px; font-size: 14px; color: #fca5a5; margin-bottom: 16px; }
+.info-box { background: #0d0f1a; border: 1px solid #1e2d4a; border-radius: 8px; padding: 14px 16px; margin-bottom: 24px; font-size: 13px; color: #93c5fd; line-height: 1.6; }
+.info-box strong { color: #60a5fa; display: block; margin-bottom: 4px; }
+.divider { border: none; border-top: 1px solid #2a2a2a; margin: 24px 0; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">🔥 CyberQ Dashboard</div>
+  <h2>Connect Your Device</h2>
+  <p class="lead">Enter your BBQ Guru / FlameBoss credentials to link your CyberQ Cloud device. This is the same login you use at <strong style="color:#ccc">myflameboss.com</strong>.</p>
+
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% endif %}
+
+  <div class="info-box">
+    <strong>📍 Where to find your Device ID</strong>
+    Log in to myflameboss.com → click your device → the 6-digit number in the URL is your Device ID.
+  </div>
+
+  <form method="POST">
+    <label>Device ID</label>
+    <input type="text" name="device_id" placeholder="324579" required pattern="[0-9]+" title="Numbers only">
+    <div class="help">The 6-digit number shown on myflameboss.com</div>
+
+    <label>Device Name (optional)</label>
+    <input type="text" name="device_name" placeholder="My CyberQ" maxlength="30">
+
+    <hr class="divider">
+
+    <label>FlameBoss Username</label>
+    <input type="text" name="fb_user" placeholder="T-123456" required autocomplete="username">
+    <div class="help">Format: T-XXXXXX (shown in your FlameBoss account)</div>
+
+    <label>FlameBoss Password</label>
+    <input type="password" name="fb_pass" required autocomplete="current-password">
+
+    <button type="submit" class="btn">Connect Device & Open Dashboard →</button>
+  </form>
+</div>
+</body>
+</html>
