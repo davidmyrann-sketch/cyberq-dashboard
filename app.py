@@ -9,11 +9,20 @@ from collections import deque
 from datetime import datetime
 import urllib.request
 import paho.mqtt.client as mqtt
+try:
+    import stripe
+    stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+except ImportError:
+    stripe = None
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 
-DB_PATH     = os.environ.get("DB_PATH", "cyberq_saas.db")
+DB_PATH             = os.environ.get("DB_PATH", "cyberq_saas.db")
+STRIPE_WH_SECRET    = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_PRICE_MONTH  = os.environ.get("STRIPE_PRICE_MONTHLY", "")   # price_xxx
+STRIPE_PRICE_YEAR   = os.environ.get("STRIPE_PRICE_ANNUAL", "")    # price_xxx
+APP_URL             = os.environ.get("APP_URL", "https://web-production-77bd1.up.railway.app")
 API_BASE    = "https://myflameboss.com/api/v1"
 MQTT_HOST   = "s2.myflameboss.com"
 MQTT_PORT   = 8084
@@ -40,24 +49,37 @@ def init_db():
     db = sqlite3.connect(DB_PATH)
     db.executescript("""
     CREATE TABLE IF NOT EXISTS users (
-        id            INTEGER PRIMARY KEY AUTOINCREMENT,
-        email         TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        name          TEXT,
-        plan          TEXT DEFAULT 'trial',
-        trial_ends    TEXT,
-        created_at    TEXT DEFAULT (datetime('now'))
+        id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+        email                  TEXT UNIQUE NOT NULL,
+        password_hash          TEXT NOT NULL,
+        name                   TEXT,
+        plan                   TEXT DEFAULT 'trial',
+        trial_ends             TEXT,
+        stripe_customer_id     TEXT,
+        stripe_subscription_id TEXT,
+        subscription_status    TEXT DEFAULT 'trial',
+        created_at             TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS devices (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id       INTEGER NOT NULL REFERENCES users(id),
         device_id     TEXT NOT NULL,
-        device_name   TEXT DEFAULT 'Min CyberQ',
+        device_name   TEXT DEFAULT 'My CyberQ',
         fb_user       TEXT NOT NULL,
         fb_pass       TEXT NOT NULL,
         created_at    TEXT DEFAULT (datetime('now'))
     );
     """)
+    # Migrate existing DB if columns missing
+    try:
+        db.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
+    except: pass
+    try:
+        db.execute("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT")
+    except: pass
+    try:
+        db.execute("ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'trial'")
+    except: pass
     db.commit()
     db.close()
 
@@ -80,6 +102,29 @@ def login_required(f):
     def decorated(*args, **kwargs):
         if not session.get("user_id"):
             return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
+
+def subscription_ok(user):
+    """Returns True if user has active trial or paid subscription."""
+    status = user["subscription_status"] or "trial"
+    if status == "active":
+        return True
+    if status == "trial":
+        trial_ends = user["trial_ends"]
+        if trial_ends and datetime.strptime(trial_ends, "%Y-%m-%d") >= datetime.now():
+            return True
+    return False
+
+def subscription_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = current_user()
+        if not user:
+            return redirect(url_for("login"))
+        if not subscription_ok(user):
+            return redirect(url_for("pricing_page"))
         return f(*args, **kwargs)
     return decorated
 
@@ -331,8 +376,120 @@ def setup():
                 return redirect(url_for("dashboard"))
     return render_template("setup.html", error=error)
 
-@app.route("/dashboard")
+@app.route("/pricing")
+def pricing_page():
+    user = current_user()
+    return render_template("pricing.html", user=user,
+                           stripe_key=os.environ.get("STRIPE_PUBLISHABLE_KEY",""))
+
+@app.route("/checkout")
 @login_required
+def checkout():
+    if not stripe or not stripe.api_key:
+        return "Stripe not configured", 500
+    plan  = request.args.get("plan", "monthly")
+    price = STRIPE_PRICE_YEAR if plan == "annual" else STRIPE_PRICE_MONTH
+    if not price:
+        return "Stripe prices not configured", 500
+
+    user = current_user()
+    # Create or reuse Stripe customer
+    customer_id = user["stripe_customer_id"]
+    if not customer_id:
+        customer = stripe.Customer.create(
+            email=user["email"],
+            name=user["name"] or user["email"],
+            metadata={"user_id": str(user["id"])}
+        )
+        customer_id = customer.id
+        get_db().execute("UPDATE users SET stripe_customer_id=? WHERE id=?",
+                         (customer_id, user["id"]))
+        get_db().commit()
+
+    session_obj = stripe.checkout.Session.create(
+        customer=customer_id,
+        payment_method_types=["card"],
+        line_items=[{"price": price, "quantity": 1}],
+        mode="subscription",
+        success_url=APP_URL + "/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url=APP_URL + "/pricing",
+        allow_promotion_codes=True,
+    )
+    return redirect(session_obj.url, code=303)
+
+@app.route("/checkout/success")
+@login_required
+def checkout_success():
+    session_id = request.args.get("session_id")
+    if session_id and stripe and stripe.api_key:
+        try:
+            cs = stripe.checkout.Session.retrieve(session_id, expand=["subscription"])
+            sub = cs.subscription
+            if sub:
+                get_db().execute(
+                    "UPDATE users SET stripe_subscription_id=?, subscription_status='active' WHERE id=?",
+                    (sub.id, session["user_id"])
+                )
+                get_db().commit()
+        except Exception as e:
+            print(f"Checkout success error: {e}")
+    return redirect(url_for("dashboard"))
+
+@app.route("/webhook", methods=["POST"])
+def stripe_webhook():
+    payload = request.get_data()
+    sig     = request.headers.get("Stripe-Signature", "")
+    try:
+        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WH_SECRET)
+    except Exception as e:
+        return str(e), 400
+
+    db = sqlite3.connect(DB_PATH)
+    etype = event["type"]
+
+    if etype in ("customer.subscription.updated", "customer.subscription.created"):
+        sub    = event["data"]["object"]
+        status = "active" if sub["status"] in ("active", "trialing") else sub["status"]
+        db.execute("UPDATE users SET subscription_status=?, stripe_subscription_id=? WHERE stripe_customer_id=?",
+                   (status, sub["id"], sub["customer"]))
+
+    elif etype == "customer.subscription.deleted":
+        sub = event["data"]["object"]
+        db.execute("UPDATE users SET subscription_status='cancelled' WHERE stripe_customer_id=?",
+                   (sub["customer"],))
+
+    elif etype == "invoice.payment_failed":
+        inv = event["data"]["object"]
+        db.execute("UPDATE users SET subscription_status='past_due' WHERE stripe_customer_id=?",
+                   (inv["customer"],))
+
+    db.commit()
+    db.close()
+    return "", 200
+
+@app.route("/account")
+@login_required
+def account():
+    user = current_user()
+    dev  = get_db().execute("SELECT * FROM devices WHERE user_id=?", (user["id"],)).fetchone()
+    return render_template("account.html", user=user, device=dev)
+
+@app.route("/account/portal")
+@login_required
+def billing_portal():
+    if not stripe or not stripe.api_key:
+        return redirect(url_for("account"))
+    user = current_user()
+    if not user["stripe_customer_id"]:
+        return redirect(url_for("pricing_page"))
+    portal = stripe.billing_portal.Session.create(
+        customer=user["stripe_customer_id"],
+        return_url=APP_URL + "/account"
+    )
+    return redirect(portal.url, code=303)
+
+@app.route("/dashboard")
+@subscription_required
 def dashboard():
     uid = session["user_id"]
     dev = get_db().execute("SELECT * FROM devices WHERE user_id=?", (uid,)).fetchone()
