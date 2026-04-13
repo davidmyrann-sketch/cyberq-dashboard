@@ -232,7 +232,7 @@ def start_device_threads(device_id, fb_user, fb_pass):
                 cook_id = cook_info.get("id") if cook_info else None
                 if cook_id: s["cook_id"] = cook_id
 
-                if cook_id and s["connected"]:
+                if cook_id:
                     cook_data = api_get(f"cooks/{cook_id}", fb_user, fb_pass)
                     points = cook_data.get("data", [])
                     if points:
@@ -241,6 +241,7 @@ def start_device_threads(device_id, fb_user, fb_pass):
                         latest = points[-1]
                         s["ts"] = datetime.now().strftime("%H:%M:%S")
                         s["last_data"] = time.time()
+                        s["connected"] = True
                         s["set_temp"] = latest["set_temp"]
                         raw_temps = [latest["pit_temp"], latest["meat_temp1"], latest["meat_temp2"], latest["meat_temp3"]]
                         s["temps"] = {}
