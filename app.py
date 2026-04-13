@@ -206,44 +206,43 @@ def start_device_threads(device_id, fb_user, fb_pass):
         while True:
             try:
                 s = ctx["state"]
-                device = api_get(f"devices/{device_id}", fb_user, fb_pass)
-                s["connected"] = device.get("online", False)
-                if s["set_temp"] is None:
-                    raw_st = device.get("set_temp")
-                    if raw_st:
-                        s["set_temp"] = raw_st
-                        if s["user_set_temp"] is None:
-                            s["user_set_temp"] = raw_st
 
-                meat_alarms = device.get("meat_alarms", [])
-                if len(meat_alarms) >= 6:
-                    for i in range(1, 4):
-                        if i not in s["food_alarms"]:
-                            tdc = meat_alarms[2 + i]
-                            if tdc and tdc > 0:
-                                s["food_alarms"][i] = tdc
+                # Always fetch the latest cook directly from /cooks list
+                cooks_data = api_get("cooks", fb_user, fb_pass)
+                cooks_list = cooks_data if isinstance(cooks_data, list) else cooks_data.get("cooks", [])
 
-                cook_info = device.get("most_recent_cook", {}) or {}
-                for i in range(1, 4):
-                    if str(i) not in s["labels"]:
-                        name = cook_info.get(f"probe_name_{i}")
-                        if name: s["labels"][str(i)] = name
+                # Pick most recent cook by highest ID
+                cook_id = None
+                if cooks_list:
+                    cook_id = max(c["id"] for c in cooks_list if "id" in c)
 
-                cook_id = cook_info.get("id") if cook_info else None
-                if cook_id: s["cook_id"] = cook_id
+                # Fall back to device endpoint if cooks list fails
+                if not cook_id:
+                    device   = api_get(f"devices/{device_id}", fb_user, fb_pass)
+                    cook_info = device.get("most_recent_cook", {}) or {}
+                    cook_id   = cook_info.get("id")
 
                 if cook_id:
+                    # Reset counter when cook changes so we reload all points
+                    if s["cook_id"] and s["cook_id"] != cook_id:
+                        s["last_cnt"] = 0
+                        ctx["history"].clear()
+                    s["cook_id"] = cook_id
+
                     cook_data = api_get(f"cooks/{cook_id}", fb_user, fb_pass)
                     points = cook_data.get("data", [])
                     if points:
                         new_pts = [p for p in points if p["cnt"] > s["last_cnt"]]
-                        if new_pts: s["last_cnt"] = new_pts[-1]["cnt"]
+                        if new_pts:
+                            s["last_cnt"] = new_pts[-1]["cnt"]
+                        # Always update from latest point regardless of new_pts
                         latest = points[-1]
-                        s["ts"] = datetime.now().strftime("%H:%M:%S")
+                        s["ts"]        = datetime.now().strftime("%H:%M:%S")
                         s["last_data"] = time.time()
                         s["connected"] = True
-                        s["set_temp"] = latest["set_temp"]
-                        raw_temps = [latest["pit_temp"], latest["meat_temp1"], latest["meat_temp2"], latest["meat_temp3"]]
+                        s["set_temp"]  = latest["set_temp"]
+                        raw_temps = [latest["pit_temp"], latest["meat_temp1"],
+                                     latest["meat_temp2"], latest["meat_temp3"]]
                         s["temps"] = {}
                         for i, raw in enumerate(raw_temps):
                             s["temps"][i] = {"c": tdc_to_c(raw), "raw": raw}
@@ -257,6 +256,17 @@ def start_device_threads(device_id, fb_user, fb_pass):
                                 "probe2": tdc_to_c(p["meat_temp2"]),
                                 "probe3": tdc_to_c(p["meat_temp3"]),
                             })
+
+                        # Also grab alarms/labels from cook metadata
+                        for i in range(1, 4):
+                            if str(i) not in s["labels"]:
+                                name = cook_data.get(f"probe_name_{i}")
+                                if name: s["labels"][str(i)] = name
+                            if i not in s["food_alarms"]:
+                                alarm = cook_data.get(f"meat_alarm_{i}")
+                                if alarm and alarm > 0:
+                                    s["food_alarms"][i] = alarm
+
             except Exception as e:
                 ctx["last_poll_error"] = f"{type(e).__name__}: {e}"
                 ctx["state"]["connected"] = False
