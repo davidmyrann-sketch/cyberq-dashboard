@@ -106,15 +106,8 @@ def login_required(f):
     return decorated
 
 def subscription_ok(user):
-    """Returns True if user has active trial or paid subscription."""
-    status = user["subscription_status"] or "trial"
-    if status == "active":
-        return True
-    if status == "trial":
-        trial_ends = user["trial_ends"]
-        if trial_ends and datetime.strptime(trial_ends, "%Y-%m-%d") >= datetime.now():
-            return True
-    return False
+    """Returns True only if user has an active paid subscription."""
+    return (user["subscription_status"] or "") == "active"
 
 def subscription_required(f):
     from functools import wraps
@@ -298,7 +291,11 @@ def mqtt_send(device_id, payload):
 @app.route("/")
 def landing():
     if session.get("user_id"):
-        return redirect(url_for("dashboard"))
+        # Clear stale session if user no longer exists in DB
+        if current_user() is None:
+            session.clear()
+        else:
+            return redirect(url_for("dashboard"))
     return render_template("landing.html")
 
 @app.route("/register", methods=["GET", "POST"])
@@ -315,14 +312,12 @@ def register():
             if db.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone():
                 error = "E-posten er allerede registrert."
             else:
-                from datetime import datetime, timedelta
-                trial_ends = (datetime.now() + timedelta(days=14)).strftime("%Y-%m-%d")
-                db.execute("INSERT INTO users (email,password_hash,name,trial_ends) VALUES (?,?,?,?)",
-                           (email, hash_pw(pw), name, trial_ends))
+                db.execute("INSERT INTO users (email,password_hash,name) VALUES (?,?,?)",
+                           (email, hash_pw(pw), name))
                 db.commit()
                 user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
                 session["user_id"] = user["id"]
-                return redirect(url_for("setup"))
+                return redirect(url_for("pricing_page"))
     return render_template("auth.html", mode="register", error=error)
 
 @app.route("/login", methods=["GET", "POST"])
