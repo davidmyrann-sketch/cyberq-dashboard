@@ -56,11 +56,17 @@ input:focus { border-color: #FF6B1A; }
 
   <div class="switch">
     {% if mode == 'login' %}
-      Don't have an account? <a href="/register">Start free trial</a>
+      Don't have an account? <a href="/register">Create account</a>
     {% else %}
       Already have an account? <a href="/login">Sign in</a>
     {% endif %}
   </div>
+
+  {% if mode == 'login' %}
+  <div style="text-align:center; margin-top:16px;">
+    <a href="/forgot-password" style="font-size:13px; color:#555; text-decoration:none;">Forgot password?</a>
+  </div>
+  {% endif %}
 </div>
 
 <a href="/" class="back">← Back to home</a>

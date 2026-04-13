@@ -3,7 +3,8 @@
 CyberQ Dashboard — SaaS edition
 Multi-tenant: each user connects their own BBQ Guru CyberQ / FlameBoss device.
 """
-import json, time, threading, ssl, os, uuid, base64, sqlite3, hashlib, secrets
+import json, time, threading, ssl, os, uuid, base64, sqlite3, hashlib, secrets, smtplib
+from email.mime.text import MIMEText
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, g
 from collections import deque
 from datetime import datetime
@@ -23,6 +24,8 @@ STRIPE_WH_SECRET    = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_PRICE_MONTH  = os.environ.get("STRIPE_PRICE_MONTHLY", "")
 STRIPE_PRICE_YEAR   = os.environ.get("STRIPE_PRICE_ANNUAL", "")
 APP_URL             = os.environ.get("APP_URL", "https://web-production-77bd1.up.railway.app")
+SMTP_USER           = os.environ.get("SMTP_USER", "")   # Gmail address
+SMTP_PASS           = os.environ.get("SMTP_PASS", "")   # Gmail app password
 API_BASE    = "https://sharemycook.com/api/v1"
 MQTT_HOST   = "s2.sharemycook.com"
 MQTT_PORT   = 8084
@@ -68,6 +71,11 @@ def init_db():
         fb_user       TEXT NOT NULL,
         fb_pass       TEXT NOT NULL,
         created_at    TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS reset_tokens (
+        token      TEXT PRIMARY KEY,
+        user_id    INTEGER NOT NULL,
+        expires_at TEXT NOT NULL
     );
     """)
     # Migrate existing DB if columns missing
@@ -370,6 +378,64 @@ def setup():
                 start_device_threads(device_id, fb_user, fb_pass)
                 return redirect(url_for("dashboard"))
     return render_template("setup.html", error=error)
+
+# ── Password reset ─────────────────────────────────────────────────────────────
+
+def send_reset_email(to_email, reset_url):
+    if not SMTP_USER or not SMTP_PASS:
+        print(f"[reset] SMTP not configured. Reset URL: {reset_url}")
+        return
+    msg = MIMEText(
+        f"Click the link below to reset your CyberQ Dashboard password.\n\n{reset_url}\n\nThis link expires in 1 hour.",
+        "plain"
+    )
+    msg["Subject"] = "Reset your CyberQ Dashboard password"
+    msg["From"]    = SMTP_USER
+    msg["To"]      = to_email
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+        s.login(SMTP_USER, SMTP_PASS)
+        s.sendmail(SMTP_USER, to_email, msg.as_string())
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    sent = False
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        db    = get_db()
+        user  = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+        if user:
+            token      = secrets.token_urlsafe(32)
+            expires_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            from datetime import timedelta
+            expires_at = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+            db.execute("INSERT OR REPLACE INTO reset_tokens (token, user_id, expires_at) VALUES (?,?,?)",
+                       (token, user["id"], expires_at))
+            db.commit()
+            reset_url = APP_URL + f"/reset-password/{token}"
+            try:
+                send_reset_email(email, reset_url)
+            except Exception as e:
+                print(f"Email error: {e}")
+        sent = True  # always show "sent" to avoid email enumeration
+    return render_template("forgot_password.html", sent=sent)
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    db  = get_db()
+    row = db.execute("SELECT * FROM reset_tokens WHERE token=?", (token,)).fetchone()
+    if not row or datetime.strptime(row["expires_at"], "%Y-%m-%d %H:%M:%S") < datetime.now():
+        return render_template("reset_password.html", error="This link has expired.", token=None)
+    error = None
+    if request.method == "POST":
+        pw = request.form.get("password", "")
+        if len(pw) < 6:
+            error = "Password must be at least 6 characters."
+        else:
+            db.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_pw(pw), row["user_id"]))
+            db.execute("DELETE FROM reset_tokens WHERE token=?", (token,))
+            db.commit()
+            return redirect(url_for("login"))
+    return render_template("reset_password.html", error=error, token=token)
 
 # ── Payment routes ─────────────────────────────────────────────────────────────
 
