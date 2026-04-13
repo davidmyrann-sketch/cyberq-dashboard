@@ -187,10 +187,15 @@ def compute_probe_status(c, target_c, alarm_c=None):
     return "OK"
 
 def api_get(path, fb_user, fb_pass):
-    auth = "Basic " + base64.b64encode(f"{fb_user}:{fb_pass}".encode()).decode()
+    # fb_user format: T-252541 → user_id = 252541
+    user_id = fb_user.lstrip("T-").lstrip("t-") if fb_user.upper().startswith("T-") else fb_user
     req = urllib.request.Request(
         f"{API_BASE}/{path}",
-        headers={"Authorization": auth, "Accept": "application/json"}
+        headers={
+            "X-API-USER-ID": user_id,
+            "X-API-TOKEN":   fb_pass,
+            "Accept":        "application/json",
+        }
     )
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read())
