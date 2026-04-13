@@ -739,10 +739,29 @@ def api_debug():
     ctx = get_device_ctx(dev["device_id"])
     s   = ctx["state"]
     return jsonify({
-        "connected": s["connected"], "mqtt_connected": s["mqtt_connected"],
+        "connected":      s["connected"],
+        "mqtt_connected": s["mqtt_connected"],
         "last_data_ago_s": round(time.time() - s["last_data"], 1),
-        "cook_id": s["cook_id"], "last_poll_error": ctx["last_poll_error"],
+        "cook_id":        s["cook_id"],
+        "last_cnt":       s["last_cnt"],
+        "last_poll_error": ctx["last_poll_error"],
+        "temps":          s["temps"],
+        "device_id_used": dev["device_id"],
     })
+
+@app.route("/api/raw_cooks")
+@login_required
+def api_raw_cooks():
+    """Debug: show raw cooks list from ShareMyCook API"""
+    dev = user_device()
+    if not dev: return jsonify({"error": "no device"})
+    try:
+        data = api_get("cooks", dev["fb_user"], dev["fb_pass"])
+        if isinstance(data, list):
+            return jsonify({"count": len(data), "first_3": data[:3]})
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 if __name__ == "__main__":
     init_db()
