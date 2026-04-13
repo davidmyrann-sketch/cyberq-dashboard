@@ -27,7 +27,7 @@ input:focus { border-color: #FF6B1A; }
 <div class="card">
   <div class="logo">🔥 CyberQ Dashboard</div>
   <h2>Connect Your Device</h2>
-  <p class="lead">Enter your BBQ Guru / FlameBoss credentials to link your CyberQ Cloud device. This is the same login you use at <strong style="color:#ccc">myflameboss.com</strong>.</p>
+  <p class="lead">Enter your ShareMyCook credentials to link your CyberQ Cloud device. Log in at <strong style="color:#ccc">sharemycook.com</strong> to find them.</p>
 
   {% if error %}
   <div class="error">{{ error }}</div>
@@ -35,25 +35,31 @@ input:focus { border-color: #FF6B1A; }
 
   <div class="info-box">
     <strong>📍 Where to find your Device ID</strong>
-    Log in to myflameboss.com → click your device → the 6-digit number in the URL is your Device ID.
+    Log in to sharemycook.com → click your device → the number in the URL is your Device ID.
   </div>
 
   <form method="POST">
     <label>Device ID</label>
     <input type="text" name="device_id" placeholder="324579" required pattern="[0-9]+" title="Numbers only">
-    <div class="help">The 6-digit number shown on myflameboss.com</div>
+    <div class="help">The number shown in the URL on sharemycook.com</div>
 
     <label>Device Name (optional)</label>
     <input type="text" name="device_name" placeholder="My CyberQ" maxlength="30">
 
     <hr class="divider">
 
-    <label>FlameBoss Username</label>
-    <input type="text" name="fb_user" placeholder="T-123456" required autocomplete="username">
-    <div class="help">Format: T-XXXXXX (shown in your FlameBoss account)</div>
+    <div class="info-box">
+      <strong>🔑 Where to find your API credentials</strong>
+      Go to sharemycook.com → Profile → Developer Credentials. Use the MQTT Username and MQTT Password shown there.
+    </div>
 
-    <label>FlameBoss Password</label>
+    <label>MQTT Username</label>
+    <input type="text" name="fb_user" placeholder="T-252541" required autocomplete="username">
+    <div class="help">Format: T-XXXXXX — found on your Developer Credentials page</div>
+
+    <label>MQTT Password / API Token</label>
     <input type="password" name="fb_pass" required autocomplete="current-password">
+    <div class="help">The long token shown as MQTT Password on your Developer Credentials page</div>
 
     <button type="submit" class="btn">Connect Device & Open Dashboard →</button>
   </form>

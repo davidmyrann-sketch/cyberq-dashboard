@@ -23,8 +23,8 @@ STRIPE_WH_SECRET    = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_PRICE_MONTH  = os.environ.get("STRIPE_PRICE_MONTHLY", "")
 STRIPE_PRICE_YEAR   = os.environ.get("STRIPE_PRICE_ANNUAL", "")
 APP_URL             = os.environ.get("APP_URL", "https://web-production-77bd1.up.railway.app")
-API_BASE    = "https://myflameboss.com/api/v1"
-MQTT_HOST   = "s2.myflameboss.com"
+API_BASE    = "https://sharemycook.com/api/v1"
+MQTT_HOST   = "s2.sharemycook.com"
 MQTT_PORT   = 8084
 POLL_SECS   = 12
 
