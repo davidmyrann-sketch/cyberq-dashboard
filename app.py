@@ -159,6 +159,7 @@ def make_device_state():
         "mqttc": None,
         "last_poll_error": "",
         "threads_started": False,
+        "stop_event": threading.Event(),
     }
 
 def get_device_ctx(device_id):
@@ -208,7 +209,8 @@ def start_device_threads(device_id, fb_user, fb_pass):
     ctx["threads_started"] = True
 
     def poll():
-        while True:
+        stop = ctx["stop_event"]
+        while not stop.is_set():
             try:
                 s = ctx["state"]
 
@@ -280,7 +282,8 @@ def start_device_threads(device_id, fb_user, fb_pass):
     def mqtt_run():
         delay = 5
         topic = f"flameboss/{device_id}/recv"
-        while True:
+        stop = ctx["stop_event"]
+        while not stop.is_set():
             try:
                 cid = f"cyberq-{uuid.uuid4().hex[:8]}"
                 mc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cid, transport="websockets")
@@ -289,15 +292,27 @@ def start_device_threads(device_id, fb_user, fb_pass):
                 mc.tls_set(cert_reqs=ssl.CERT_NONE)
                 mc.tls_insecure_set(True)
                 mc.on_connect    = lambda c,u,f,rc,p=None: ctx["state"].__setitem__("mqtt_connected", rc==0)
-                mc.on_disconnect = lambda c,u,*a: ctx["state"].__setitem__("mqtt_connected", False)
+                # Force loop_forever to return by disconnecting — outer while creates fresh client
+                mc.on_disconnect = lambda c,u,*a: (ctx["state"].__setitem__("mqtt_connected", False), c.disconnect())
                 ctx["mqttc"] = mc
-                mc.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
-                mc.loop_forever()
-                delay = 5
+                mc.connect(MQTT_HOST, MQTT_PORT, keepalive=30)
+                mc.loop_start()
+                # Wait for connection
+                t0 = time.time()
+                while not ctx["state"]["mqtt_connected"] and time.time() - t0 < 20 and not stop.is_set():
+                    time.sleep(1)
+                if ctx["state"]["mqtt_connected"]:
+                    delay = 5
+                    # Stay alive while connected
+                    while ctx["state"]["mqtt_connected"] and not stop.is_set():
+                        time.sleep(3)
+                mc.loop_stop()
+                mc.disconnect()
             except Exception as e:
                 print(f"MQTT [{device_id}] {e}")
+            if not stop.is_set():
                 time.sleep(delay)
-                delay = min(delay * 2, 120)
+                delay = min(delay * 2, 60)
 
     threading.Thread(target=poll,     daemon=True).start()
     threading.Thread(target=mqtt_run, daemon=True).start()
@@ -364,6 +379,16 @@ def login():
 
 @app.route("/logout")
 def logout():
+    # Stop background threads for this user's device so they restart fresh on next login
+    uid = session.get("user_id")
+    if uid:
+        db = get_db()
+        dev = db.execute("SELECT device_id FROM devices WHERE user_id=?", (uid,)).fetchone()
+        if dev:
+            with DEVICES_LOCK:
+                ctx = DEVICES.pop(dev["device_id"], None)
+            if ctx:
+                ctx["stop_event"].set()
     session.clear()
     return redirect(url_for("landing"))
 
