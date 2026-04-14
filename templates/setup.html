@@ -7,61 +7,96 @@
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d0d0d; color: #e8e8e8; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
-.card { background: #161616; border: 1px solid #2a2a2a; border-radius: 16px; padding: 40px; width: 100%; max-width: 460px; }
-.logo { text-align: center; font-size: 22px; font-weight: 900; color: #FF6B1A; margin-bottom: 24px; }
-h2 { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
-.lead { font-size: 14px; color: #666; margin-bottom: 32px; line-height: 1.6; }
+.card { background: #161616; border: 1px solid #2a2a2a; border-radius: 16px; padding: 40px; width: 100%; max-width: 500px; }
+.logo { text-align: center; font-size: 22px; font-weight: 900; color: #FF6B1A; margin-bottom: 8px; }
+.logo-sub { text-align: center; font-size: 13px; color: #555; margin-bottom: 28px; }
+h2 { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+.lead { font-size: 14px; color: #666; margin-bottom: 28px; line-height: 1.6; }
 label { font-size: 13px; color: #888; display: block; margin-bottom: 6px; }
-.help { font-size: 12px; color: #555; margin-top: -10px; margin-bottom: 16px; }
+.help { font-size: 12px; color: #555; margin-top: -8px; margin-bottom: 16px; line-height: 1.5; }
 input { width: 100%; padding: 12px 14px; background: #0d0d0d; border: 1.5px solid #2a2a2a; border-radius: 8px; color: #e8e8e8; font-size: 15px; outline: none; margin-bottom: 6px; transition: border-color 0.2s; }
 input:focus { border-color: #FF6B1A; }
-.btn { width: 100%; padding: 14px; background: #FF6B1A; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 12px; }
+.btn { width: 100%; padding: 14px; background: #FF6B1A; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 8px; }
 .btn:hover { background: #e55a0a; }
 .error { background: #2d1010; border: 1px solid #7f1d1d; border-radius: 8px; padding: 12px 14px; font-size: 14px; color: #fca5a5; margin-bottom: 16px; }
-.info-box { background: #0d0f1a; border: 1px solid #1e2d4a; border-radius: 8px; padding: 14px 16px; margin-bottom: 24px; font-size: 13px; color: #93c5fd; line-height: 1.6; }
-.info-box strong { color: #60a5fa; display: block; margin-bottom: 4px; }
 .divider { border: none; border-top: 1px solid #2a2a2a; margin: 24px 0; }
+
+/* Step guide */
+.guide { background: #0d1117; border: 1px solid #1a2332; border-radius: 12px; padding: 20px; margin-bottom: 28px; }
+.guide-title { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #FF6B1A; margin-bottom: 16px; }
+.step { display: flex; gap: 12px; margin-bottom: 12px; align-items: flex-start; }
+.step:last-child { margin-bottom: 0; }
+.step-num { width: 22px; height: 22px; border-radius: 50%; background: #FF6B1A; color: white; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.step-text { font-size: 13px; color: #aaa; line-height: 1.55; }
+.step-text strong { color: #e8e8e8; }
+.step-text a { color: #60a5fa; text-decoration: none; }
+.step-text a:hover { text-decoration: underline; }
+.step-text code { background: #1e2a3a; border-radius: 4px; padding: 1px 6px; font-size: 12px; color: #93c5fd; }
+
+.field-group { margin-bottom: 4px; }
 </style>
 </head>
 <body>
 <div class="card">
   <div class="logo">🔥 CyberQ Dashboard</div>
-  <h2>Connect Your Device</h2>
-  <p class="lead">Enter your ShareMyCook credentials to link your CyberQ Cloud device. Log in at <strong style="color:#ccc">sharemycook.com</strong> to find them.</p>
+  <div class="logo-sub">Real-time BBQ monitoring</div>
+  <h2>Connect Your CyberQ Cloud</h2>
+  <p class="lead">Follow the steps below to link your device. You need a free account on <strong style="color:#ccc">ShareMyCook</strong> — the official app for CyberQ Cloud.</p>
 
   {% if error %}
   <div class="error">{{ error }}</div>
   {% endif %}
 
-  <div class="info-box">
-    <strong>📍 Where to find your Device ID</strong>
-    Log in to sharemycook.com → click your device → the number in the URL is your Device ID.
+  <div class="guide">
+    <div class="guide-title">📋 How to find your credentials</div>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">Go to <a href="https://www.sharemycook.com" target="_blank">sharemycook.com</a> and log in to your account.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-text">Click your <strong>profile icon</strong> (top right) → select <strong>Developer Credentials</strong>. Or go directly to <a href="https://www.sharemycook.com/en/users/dev" target="_blank">sharemycook.com/en/users/dev</a></div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">You will see your API credentials — copy two values:<br>
+        · <strong>MQTT Username</strong> → looks like <code>T-252541</code><br>
+        · <strong>MQTT Password</strong> → the long token string<br>
+        Your device is detected automatically.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-text">Make sure your <strong>CyberQ Cloud</strong> device is powered on and connected to Wi-Fi before saving.</div>
+    </div>
   </div>
 
   <form method="POST">
-    <label>Device ID</label>
-    <input type="text" name="device_id" placeholder="324579" required pattern="[0-9]+" title="Numbers only">
-    <div class="help">The number shown in the URL on sharemycook.com</div>
 
-    <label>Device Name (optional)</label>
-    <input type="text" name="device_name" placeholder="My CyberQ" maxlength="30">
+    <div class="field-group">
+      <label>Device Name <span style="color:#555">(optional)</span></label>
+      <input type="text" name="device_name" placeholder="My CyberQ" maxlength="30">
+      <div class="help">A friendly name shown in your dashboard. Example: "Backyard Smoker"</div>
+    </div>
 
     <hr class="divider">
 
-    <div class="info-box">
-      <strong>🔑 Where to find your API credentials</strong>
-      Go to sharemycook.com → Profile → Developer Credentials. Use the MQTT Username and MQTT Password shown there.
+    <div class="field-group">
+      <label>MQTT Username</label>
+      <input type="text" name="fb_user" placeholder="T-252541" required autocomplete="username">
+      <div class="help">Starts with <code>T-</code> followed by your user ID. Found on Developer Credentials page.</div>
     </div>
 
-    <label>MQTT Username</label>
-    <input type="text" name="fb_user" placeholder="T-252541" required autocomplete="username">
-    <div class="help">Format: T-XXXXXX — found on your Developer Credentials page</div>
+    <div class="field-group">
+      <label>MQTT Password / API Token</label>
+      <input type="password" name="fb_pass" required autocomplete="current-password">
+      <div class="help">The long alphanumeric token shown as <strong>MQTT Password</strong> on your Developer Credentials page.</div>
+    </div>
 
-    <label>MQTT Password / API Token</label>
-    <input type="password" name="fb_pass" required autocomplete="current-password">
-    <div class="help">The long token shown as MQTT Password on your Developer Credentials page</div>
-
-    <button type="submit" class="btn">Connect Device & Open Dashboard →</button>
+    <button type="submit" class="btn">Connect & Open Dashboard →</button>
   </form>
 </div>
 </body>

@@ -400,14 +400,19 @@ def setup():
         device_name = request.form.get("device_name", "Min CyberQ").strip()
         fb_user     = request.form.get("fb_user", "").strip()
         fb_pass     = request.form.get("fb_pass", "").strip()
-        if not device_id or not fb_user or not fb_pass:
+        if not fb_user or not fb_pass:
             error = "Alle felt må fylles ut."
         else:
-            # Verify credentials
+            # Auto-detect real device ID from API
             try:
-                api_get(f"devices/{device_id}", fb_user, fb_pass)
+                devices_data = api_get("devices", fb_user, fb_pass)
+                dev_list = devices_data if isinstance(devices_data, list) else devices_data.get("devices", [])
+                if dev_list:
+                    device_id = str(dev_list[0]["id"])
+                elif not device_id:
+                    error = "Fant ingen enheter koblet til denne kontoen."
             except Exception as e:
-                error = f"Kunne ikke koble til enheten: {e}"
+                error = f"Kunne ikke koble til: {e}"
             if not error:
                 uid = session["user_id"]
                 db  = get_db()
