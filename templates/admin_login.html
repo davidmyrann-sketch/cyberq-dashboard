@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — CyberQ</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d0d0d; color: #e0e0e0; font-family: -apple-system, sans-serif;
+         display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 14px;
+          padding: 40px; width: 340px; }
+  h1 { font-size: 18px; color: #e8620a; margin-bottom: 28px; }
+  input { width: 100%; background: #111; border: 1px solid #333; border-radius: 8px;
+          color: #e0e0e0; font-size: 14px; padding: 10px 14px; margin-bottom: 14px; }
+  button { width: 100%; background: #e8620a; border: none; border-radius: 8px;
+           color: #fff; font-size: 14px; font-weight: 600; padding: 11px; cursor: pointer; }
+  .error { color: #e85d5d; font-size: 13px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔐 CyberQ Admin</h1>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="POST">
+    <input type="password" name="password" placeholder="Admin-passord" autofocus>
+    <button type="submit">Logg inn</button>
+  </form>
+</div>
+</body>
+</html>

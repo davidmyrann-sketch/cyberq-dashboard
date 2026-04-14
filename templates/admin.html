@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — CyberQ</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d0d0d; color: #e0e0e0; font-family: -apple-system, sans-serif; padding: 32px; }
+  h1 { font-size: 20px; color: #e8620a; margin-bottom: 6px; }
+  .meta { color: #666; font-size: 13px; margin-bottom: 28px; }
+  a.logout { color: #888; font-size: 13px; text-decoration: none; margin-left: 16px; }
+  table { width: 100%; border-collapse: collapse; background: #1a1a1a;
+          border-radius: 12px; overflow: hidden; }
+  th { background: #222; color: #888; font-size: 11px; text-transform: uppercase;
+       letter-spacing: 1px; padding: 12px 16px; text-align: left; }
+  td { padding: 13px 16px; border-top: 1px solid #222; font-size: 13px; }
+  tr:hover td { background: #1f1f1f; }
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .active  { background: #1a3d1a; color: #4caf50; }
+  .inactive { background: #2a1a1a; color: #e85d5d; }
+  .trial  { background: #2a2a1a; color: #f0b429; }
+  button.del { background: #2a1a1a; border: 1px solid #5a2020; border-radius: 6px;
+               color: #e85d5d; cursor: pointer; font-size: 12px; padding: 5px 12px; }
+  button.del:hover { background: #3a1a1a; }
+  .empty { color: #555; font-size: 13px; padding: 24px 16px; }
+</style>
+</head>
+<body>
+<div style="display:flex;align-items:center;margin-bottom:4px;">
+  <h1>🛠 Admin — CyberQ</h1>
+  <a href="/admin/logout" class="logout">Logg ut</a>
+</div>
+<p class="meta">{{ users|length }} bruker{{ 'e' if users|length != 1 else '' }} totalt</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>E-post</th>
+      <th>Status</th>
+      <th>Enhet</th>
+      <th>API-bruker</th>
+      <th>Registrert</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td style="color:#555;">{{ u.id }}</td>
+      <td>{{ u.email }}</td>
+      <td>
+        {% if u.subscription_status == 'active' %}
+          <span class="badge active">Aktiv</span>
+        {% elif u.subscription_status == 'trialing' %}
+          <span class="badge trial">Trial</span>
+        {% else %}
+          <span class="badge inactive">{{ u.subscription_status or 'Ingen' }}</span>
+        {% endif %}
+      </td>
+      <td>{{ u.device_name or '—' }}</td>
+      <td style="color:#555;">{{ u.fb_user or '—' }}</td>
+      <td style="color:#555;">{{ u.created_at[:10] if u.created_at else '—' }}</td>
+      <td>
+        <form method="POST" action="/admin/delete/{{ u.id }}"
+              onsubmit="return confirm('Slette {{ u.email }}?')">
+          <button class="del" type="submit">Slett</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="empty">Ingen brukere ennå.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</body>
+</html>

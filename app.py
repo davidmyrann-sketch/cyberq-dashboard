@@ -26,6 +26,7 @@ STRIPE_PRICE_YEAR   = os.environ.get("STRIPE_PRICE_ANNUAL", "")
 APP_URL             = os.environ.get("APP_URL", "https://web-production-77bd1.up.railway.app")
 SMTP_USER           = os.environ.get("SMTP_USER", "")   # Gmail address
 SMTP_PASS           = os.environ.get("SMTP_PASS", "")   # Gmail app password
+ADMIN_PASSWORD      = os.environ.get("ADMIN_PASSWORD", "cyberq-admin")
 API_BASE    = "https://sharemycook.com/api/v1"
 MQTT_HOST   = "s2.sharemycook.com"
 MQTT_PORT   = 8084
@@ -792,6 +793,58 @@ def api_raw_cooks():
         return jsonify(data)
     except Exception as e:
         return jsonify({"error": str(e)})
+
+def admin_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("is_admin"):
+            return redirect(url_for("admin_login"))
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    error = ""
+    if request.method == "POST":
+        if request.form.get("password") == ADMIN_PASSWORD:
+            session["is_admin"] = True
+            return redirect(url_for("admin_dashboard"))
+        error = "Feil passord."
+    return render_template("admin_login.html", error=error)
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("is_admin", None)
+    return redirect(url_for("admin_login"))
+
+@app.route("/admin")
+@admin_required
+def admin_dashboard():
+    db = get_db()
+    users = db.execute("""
+        SELECT u.id, u.email, u.created_at, u.subscription_status,
+               d.device_id, d.device_name, d.fb_user
+        FROM users u
+        LEFT JOIN devices d ON d.user_id = u.id
+        ORDER BY u.created_at DESC
+    """).fetchall()
+    return render_template("admin.html", users=users)
+
+@app.route("/admin/delete/<int:user_id>", methods=["POST"])
+@admin_required
+def admin_delete_user(user_id):
+    db = get_db()
+    dev = db.execute("SELECT device_id FROM devices WHERE user_id=?", (user_id,)).fetchone()
+    if dev:
+        with DEVICES_LOCK:
+            ctx = DEVICES.pop(dev["device_id"], None)
+        if ctx:
+            ctx["stop_event"].set()
+    db.execute("DELETE FROM devices WHERE user_id=?", (user_id,))
+    db.execute("DELETE FROM users WHERE id=?", (user_id,))
+    db.commit()
+    return redirect(url_for("admin_dashboard"))
 
 if __name__ == "__main__":
     init_db()
