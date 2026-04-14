@@ -797,6 +797,25 @@ def api_raw_cooks():
     except Exception as e:
         return jsonify({"error": str(e)})
 
+@app.route("/nettest")
+def nettest():
+    import socket
+    results = {}
+    hosts = [
+        ("myflameboss.com", 443),
+        ("myflameboss.com", 80),
+        ("sharemycook.com", 443),
+        ("google.com", 443),
+    ]
+    for host, port in hosts:
+        try:
+            s = socket.create_connection((host, port), timeout=5)
+            s.close()
+            results[f"{host}:{port}"] = "OK"
+        except Exception as e:
+            results[f"{host}:{port}"] = str(e)
+    return jsonify(results)
+
 def admin_required(f):
     from functools import wraps
     @wraps(f)
