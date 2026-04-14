@@ -804,7 +804,9 @@ def nettest():
     hosts = [
         ("myflameboss.com", 443),
         ("myflameboss.com", 80),
+        ("s2.myflameboss.com", 8084),
         ("sharemycook.com", 443),
+        ("s2.sharemycook.com", 8084),
         ("google.com", 443),
     ]
     for host, port in hosts:
