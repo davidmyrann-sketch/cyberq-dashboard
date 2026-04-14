@@ -827,7 +827,6 @@ def api_ingest():
     return jsonify({"ok": True})
 
 @app.route("/agent.py")
-@login_required
 def download_agent():
     from flask import Response
     path = os.path.join(os.path.dirname(__file__), "cyberq_agent.py")
