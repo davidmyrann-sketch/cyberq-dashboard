@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Install Agent — CyberQ Dashboard</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       background: #0d0d0d; color: #e8e8e8; min-height: 100vh;
+       display: flex; align-items: center; justify-content: center; padding: 24px; }
+.card { background: #161616; border: 1px solid #2a2a2a; border-radius: 16px;
+        padding: 40px; width: 100%; max-width: 600px; }
+.logo { text-align: center; font-size: 22px; font-weight: 900; color: #FF6B1A; margin-bottom: 6px; }
+.logo-sub { text-align: center; font-size: 13px; color: #555; margin-bottom: 28px; }
+h2 { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+.lead { font-size: 14px; color: #777; margin-bottom: 28px; line-height: 1.6; }
+.step { display: flex; gap: 14px; margin-bottom: 20px; align-items: flex-start; }
+.step-num { width: 26px; height: 26px; border-radius: 50%; background: #FF6B1A; color: white;
+            font-size: 12px; font-weight: 800; display: flex; align-items: center;
+            justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.step-text { font-size: 14px; color: #aaa; line-height: 1.6; }
+.step-text strong { color: #e8e8e8; }
+pre { background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 8px;
+      padding: 14px 16px; font-size: 13px; color: #93c5fd; overflow-x: auto;
+      margin-top: 10px; white-space: pre-wrap; word-break: break-all; }
+.token-box { background: #0d1117; border: 1px solid #1e3a5f; border-radius: 10px;
+             padding: 16px; margin: 20px 0; }
+.token-label { font-size: 11px; color: #FF6B1A; text-transform: uppercase;
+               letter-spacing: 1.5px; margin-bottom: 8px; font-weight: 700; }
+.token-val { font-family: monospace; font-size: 13px; color: #93c5fd; word-break: break-all; }
+.btn { display: inline-block; padding: 13px 24px; background: #FF6B1A; color: white;
+       border: none; border-radius: 10px; font-size: 15px; font-weight: 700;
+       cursor: pointer; text-decoration: none; margin-top: 24px; }
+.btn:hover { background: #e55a0a; }
+.note { background: #1a1a0d; border: 1px solid #3a3a1a; border-radius: 8px;
+        padding: 12px 14px; font-size: 13px; color: #aaa; margin-top: 20px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">🔥 CyberQ Dashboard</div>
+  <div class="logo-sub">Real-time BBQ monitoring</div>
+  <h2>✅ Device saved — install the agent</h2>
+  <p class="lead">Because BBQ Guru's API blocks cloud servers, a small agent runs on your own computer and forwards data to your dashboard. It takes 2 minutes to set up.</p>
+
+  <div class="token-box">
+    <div class="token-label">🔑 Your Agent Token</div>
+    <div class="token-val">{{ device.agent_token }}</div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-text">
+      <strong>Download the agent</strong> — save this file as <strong>cyberq_agent.py</strong> on your computer:<br>
+      <a href="/agent.py" style="color:#60a5fa;font-size:13px;">⬇ Download cyberq_agent.py</a>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-text">
+      <strong>Run it in your terminal</strong> — copy and paste this command:
+      <pre>CYBERQ_TOKEN="{{ device.agent_token }}" \
+CYBERQ_USER="{{ device.fb_user }}" \
+CYBERQ_PASS="{{ device.fb_pass }}" \
+python3 cyberq_agent.py</pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-text">
+      <strong>Keep it running</strong> while you use the dashboard. The agent sends data every 12 seconds. You can run it in the background or in a separate terminal window.
+    </div>
+  </div>
+
+  <div class="note">
+    💡 <strong>Tip:</strong> Want the agent to start automatically? On Mac, you can add it to Login Items or run it with <code>nohup python3 cyberq_agent.py &amp;</code>.
+  </div>
+
+  <a href="/dashboard" class="btn">Open Dashboard →</a>
+</div>
+</body>
+</html>

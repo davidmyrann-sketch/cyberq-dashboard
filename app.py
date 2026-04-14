@@ -81,6 +81,9 @@ def init_db():
     """)
     # Migrate existing DB if columns missing
     try:
+        db.execute("ALTER TABLE devices ADD COLUMN agent_token TEXT")
+    except: pass
+    try:
         db.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
     except: pass
     try:
@@ -313,7 +316,7 @@ def start_device_threads(device_id, fb_user, fb_pass):
                 time.sleep(delay)
                 delay = min(delay * 2, 60)
 
-    threading.Thread(target=poll,     daemon=True).start()
+    # HTTP polling disabled — data comes from local agent via /api/ingest
     threading.Thread(target=mqtt_run, daemon=True).start()
 
 def mqtt_send(device_id, payload):
@@ -403,25 +406,16 @@ def setup():
         if not fb_user or not fb_pass:
             error = "Alle felt må fylles ut."
         else:
-            # Auto-detect real device ID from API
-            try:
-                devices_data = api_get("devices", fb_user, fb_pass)
-                dev_list = devices_data if isinstance(devices_data, list) else devices_data.get("devices", [])
-                if dev_list:
-                    device_id = str(dev_list[0]["id"])
-                elif not device_id:
-                    error = "Fant ingen enheter koblet til denne kontoen."
-            except Exception as e:
-                error = f"Kunne ikke koble til: {e}"
-            if not error:
-                uid = session["user_id"]
-                db  = get_db()
-                db.execute("DELETE FROM devices WHERE user_id=?", (uid,))
-                db.execute("INSERT INTO devices (user_id,device_id,device_name,fb_user,fb_pass) VALUES (?,?,?,?,?)",
-                           (uid, device_id, device_name, fb_user, fb_pass))
-                db.commit()
-                start_device_threads(device_id, fb_user, fb_pass)
-                return redirect(url_for("dashboard"))
+            uid = session["user_id"]
+            db  = get_db()
+            agent_token = secrets.token_urlsafe(32)
+            # Use fb_user number as placeholder device_id (real ID comes via agent)
+            device_id = fb_user.lstrip("T-").lstrip("t-") if fb_user.upper().startswith("T-") else fb_user
+            db.execute("DELETE FROM devices WHERE user_id=?", (uid,))
+            db.execute("INSERT INTO devices (user_id,device_id,device_name,fb_user,fb_pass,agent_token) VALUES (?,?,?,?,?,?)",
+                       (uid, device_id, device_name, fb_user, fb_pass, agent_token))
+            db.commit()
+            return redirect(url_for("setup_agent"))
     return render_template("setup.html", error=error)
 
 # ── Password reset ─────────────────────────────────────────────────────────────
@@ -796,6 +790,51 @@ def api_raw_cooks():
         return jsonify(data)
     except Exception as e:
         return jsonify({"error": str(e)})
+
+@app.route("/setup/agent")
+@login_required
+def setup_agent():
+    dev = user_device()
+    if not dev:
+        return redirect(url_for("setup"))
+    return render_template("setup_agent.html", device=dev, app_url=APP_URL)
+
+@app.route("/api/ingest", methods=["POST"])
+def api_ingest():
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "")
+    db = get_db()
+    dev = db.execute("SELECT * FROM devices WHERE agent_token=?", (token,)).fetchone()
+    if not dev:
+        return jsonify({"error": "invalid token"}), 401
+    ctx = get_device_ctx(dev["device_id"])
+    s   = ctx["state"]
+    s["connected"] = data.get("connected", False)
+    s["last_data"]  = time.time()
+    if data.get("connected"):
+        s["cook_id"]    = data.get("cook_id")
+        s["set_temp"]   = data.get("set_temp")
+        s["temps"]      = {str(k): v for k, v in data.get("temps", {}).items()}
+        s["blower"]     = data.get("blower", 0)
+        s["ts"]         = datetime.now().strftime("%H:%M:%S")
+        if data.get("food_alarms"):
+            s["food_alarms"].update({str(k): v for k, v in data["food_alarms"].items()})
+        if data.get("labels"):
+            s["labels"].update({str(k): v for k, v in data["labels"].items()})
+        hp = data.get("history_point")
+        if hp:
+            ctx["history"].append(hp)
+    return jsonify({"ok": True})
+
+@app.route("/agent.py")
+@login_required
+def download_agent():
+    from flask import Response
+    path = os.path.join(os.path.dirname(__file__), "cyberq_agent.py")
+    with open(path) as f:
+        src = f.read().replace("{{ app_url }}", APP_URL)
+    return Response(src, mimetype="text/plain",
+                    headers={"Content-Disposition": "attachment; filename=cyberq_agent.py"})
 
 @app.route("/nettest")
 def nettest():
