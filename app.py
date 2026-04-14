@@ -27,8 +27,8 @@ APP_URL             = os.environ.get("APP_URL", "https://web-production-77bd1.up
 SMTP_USER           = os.environ.get("SMTP_USER", "")   # Gmail address
 SMTP_PASS           = os.environ.get("SMTP_PASS", "")   # Gmail app password
 ADMIN_PASSWORD      = os.environ.get("ADMIN_PASSWORD", "cyberq-admin")
-API_BASE    = "https://sharemycook.com/api/v1"
-MQTT_HOST   = "s2.sharemycook.com"
+API_BASE    = "https://myflameboss.com/api/v1"
+MQTT_HOST   = "s2.myflameboss.com"
 MQTT_PORT   = 8084
 POLL_SECS   = 12
 
@@ -189,15 +189,12 @@ def compute_probe_status(c, target_c, alarm_c=None):
     return "OK"
 
 def api_get(path, fb_user, fb_pass):
-    # fb_user format: T-252541 → user_id = 252541
-    user_id = fb_user.lstrip("T-").lstrip("t-") if fb_user.upper().startswith("T-") else fb_user
+    # fb_user: T-252541 or 252541 — always send with T- prefix for Basic auth
+    user = fb_user if str(fb_user).upper().startswith("T-") else f"T-{fb_user}"
+    auth = "Basic " + base64.b64encode(f"{user}:{fb_pass}".encode()).decode()
     req = urllib.request.Request(
         f"{API_BASE}/{path}",
-        headers={
-            "X-API-USER-ID": user_id,
-            "X-API-TOKEN":   fb_pass,
-            "Accept":        "application/json",
-        }
+        headers={"Authorization": auth, "Accept": "application/json"}
     )
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read())
@@ -289,7 +286,8 @@ def start_device_threads(device_id, fb_user, fb_pass):
                 cid = f"cyberq-{uuid.uuid4().hex[:8]}"
                 mc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cid, transport="websockets")
                 mc.ws_set_options(path="/mqtt")
-                mc.username_pw_set(fb_user, fb_pass)
+                mqtt_user = fb_user if str(fb_user).upper().startswith("T-") else f"T-{fb_user}"
+                mc.username_pw_set(mqtt_user, fb_pass)
                 mc.tls_set(cert_reqs=ssl.CERT_NONE)
                 mc.tls_insecure_set(True)
                 mc.on_connect    = lambda c,u,f,rc,p=None: ctx["state"].__setitem__("mqtt_connected", rc==0)
