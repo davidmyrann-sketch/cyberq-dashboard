@@ -52,31 +52,30 @@ pre { background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 8px;
   <div class="step">
     <div class="step-num">1</div>
     <div class="step-text">
-      <strong>Download the agent</strong> — save this file as <strong>cyberq_agent.py</strong> on your computer:<br>
-      <a href="/agent.py" style="color:#60a5fa;font-size:13px;">⬇ Download cyberq_agent.py</a>
+      <strong>Download the agent</strong> — credentials are already included in the file:
+      <br><br>
+      <a href="/agent.py" style="display:inline-block;background:#FF6B1A;color:white;padding:10px 20px;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none;">⬇ Download cyberq_agent.py</a>
     </div>
   </div>
 
   <div class="step">
     <div class="step-num">2</div>
     <div class="step-text">
-      <strong>Run it in your terminal</strong> — copy and paste this command:
-      <pre>CYBERQ_TOKEN="{{ device.agent_token }}" \
-CYBERQ_USER="{{ device.fb_user }}" \
-CYBERQ_PASS="{{ device.fb_pass }}" \
-python3 cyberq_agent.py</pre>
+      <strong>Open Terminal</strong> and run:
+      <pre>python3 ~/Downloads/cyberq_agent.py</pre>
+      You should see <strong>✅ Pit: XX°C</strong> appearing every 12 seconds.
     </div>
   </div>
 
   <div class="step">
     <div class="step-num">3</div>
     <div class="step-text">
-      <strong>Keep it running</strong> while you use the dashboard. The agent sends data every 12 seconds. You can run it in the background or in a separate terminal window.
+      <strong>Keep the terminal open</strong> while you use the dashboard. Open a new tab in your browser to check your dashboard.
     </div>
   </div>
 
   <div class="note">
-    💡 <strong>Tip:</strong> Want the agent to start automatically? On Mac, you can add it to Login Items or run it with <code>nohup python3 cyberq_agent.py &amp;</code>.
+    💡 <strong>Auto-start on Mac:</strong> Run <code>nohup python3 ~/Downloads/cyberq_agent.py &amp;</code> to keep it running in the background even after closing the terminal.
   </div>
 
   <a href="/dashboard" class="btn">Open Dashboard →</a>

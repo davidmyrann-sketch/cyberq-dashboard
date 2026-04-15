@@ -827,11 +827,20 @@ def api_ingest():
     return jsonify({"ok": True})
 
 @app.route("/agent.py")
+@login_required
 def download_agent():
     from flask import Response
+    dev = user_device()
+    if not dev:
+        return redirect(url_for("setup"))
     path = os.path.join(os.path.dirname(__file__), "cyberq_agent.py")
     with open(path) as f:
-        src = f.read().replace("{{ app_url }}", APP_URL)
+        src = f.read()
+    # Inject credentials directly into the file so user just runs python3 cyberq_agent.py
+    src = src.replace('os.environ.get("CYBERQ_URL",   "{{ app_url }}")', f'"{APP_URL}"')
+    src = src.replace('os.environ.get("CYBERQ_TOKEN", "")', f'"{dev["agent_token"]}"')
+    src = src.replace('os.environ.get("CYBERQ_USER",  "")', f'"{dev["fb_user"]}"')
+    src = src.replace('os.environ.get("CYBERQ_PASS",  "")', f'"{dev["fb_pass"]}"')
     return Response(src, mimetype="text/plain",
                     headers={"Content-Disposition": "attachment; filename=cyberq_agent.py"})
 
